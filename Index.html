@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<base target="_top">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Story & Feed Layouts</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<style>
+*{box-sizing:border-box}
+body{margin:0;font:14px system-ui,sans-serif;background:#111;color:#eee}
+body[data-tab=feed] .s{display:none!important}
+body[data-tab=stories] .f{display:none!important}
+header{position:sticky;top:0;z-index:5;background:#1c1c1e;padding:10px;display:flex;flex-wrap:wrap;gap:8px;align-items:center;border-bottom:1px solid #333}
+button,select,input[type=text],input[type=number]{background:#2c2c2e;color:#eee;border:1px solid #444;border-radius:8px;padding:8px 10px;font:inherit}
+button{cursor:pointer}button.on{background:#0a84ff;border-color:#0a84ff}button.big{background:#30d158;color:#000;font-weight:600}
+label{display:flex;align-items:center;gap:4px}
+h3{margin:14px 10px 6px}
+.hint{padding:0 10px;color:#aaa;font-size:13px}
+#pend{display:flex;gap:6px;padding:0 10px;min-height:56px;align-items:center;flex-wrap:wrap}
+#pend img{height:52px;border-radius:6px}
+#gal{display:grid;grid-template-columns:repeat(auto-fill,minmax(92px,1fr));gap:6px;padding:10px}
+#gal div{position:relative;aspect-ratio:1;cursor:pointer}
+#gal img{width:100%;height:100%;object-fit:cover;border-radius:6px;display:block}
+#gal .b{position:absolute;top:4px;right:4px;background:#0a84ff;border-radius:12px;min-width:22px;text-align:center;font-weight:700;padding:1px 5px}
+#gal .u{opacity:.3}#gal .u .b{background:#30d158;color:#000}
+#lay{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:10px;padding:10px}
+#flay{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:10px;padding:10px}
+.card{background:#1c1c1e;border-radius:10px;padding:6px;text-align:center}
+.card canvas{width:100%;border-radius:6px;display:block;margin-bottom:6px;background:#000}
+.card small{display:block;margin-bottom:6px;color:#aaa}
+.card button{padding:5px 7px;font-size:12px}
+#modal{display:none;position:fixed;inset:0;background:#000e;z-index:10;flex-direction:column;align-items:center;justify-content:center;padding:8px;gap:8px}
+#cv{touch-action:none;border-radius:6px;background:#000}
+#ctl{display:flex;gap:6px;flex-wrap:wrap;justify-content:center;align-items:center}
+#msg{position:fixed;bottom:10px;left:50%;transform:translateX(-50%);background:#333;padding:8px 14px;border-radius:20px;display:none;z-index:20}
+</style>
+</head>
+<body data-tab="stories">
+<header>
+  <button id="t1" onclick="setTab('stories')">📱 Stories</button>
+  <button id="t2" onclick="setTab('feed')">🖼 Feed</button>
+  <span class="s"><button id="m2" onclick="setMode(2)">2</button> <button id="m3" onclick="setMode(3)">3</button> <button id="m4" onclick="setMode(4)">4</button></span>
+  <label class="s">Fundo <input type="color" id="bg" value="#000000" oninput="S.bg=this.value;renderLay()"></label>
+  <label class="s"><input type="checkbox" id="safe" checked onchange="S.safe=this.checked;renderLay()">Zona segura</label>
+  <select id="fk" class="f" onchange="fkChange()">
+    <option value="car">Carrossel panorâmico</option>
+    <option value="1">Mural 3 posts (3×1)</option>
+    <option value="2">Mural 6 posts (3×2)</option>
+    <option value="3">Mural 9 posts (3×3)</option>
+  </select>
+  <label class="f" id="fnl">Partes <input type="number" id="fn" min="2" max="20" value="5" style="width:64px"></label>
+  <select id="tf" class="f">
+    <option value="1080x1350">Corte 4:5 (1080×1350)</option>
+    <option value="1080x1440">Corte 3:4 (1080×1440)</option>
+    <option value="1080x1080">Corte 1:1 (1080×1080)</option>
+  </select>
+  <label><input type="checkbox" id="hide" onchange="S.hide=this.checked;renderGal()">Ocultar usadas</label>
+  <select id="fmt"><option value="image/jpeg">JPG</option><option value="image/png">PNG</option></select>
+  <select id="scl"><option value="1">1× (1080 px)</option><option value="2">2× (2160 px)</option></select>
+  <button class="big" onclick="zipAll()">⬇ Baixar todos (ZIP)</button>
+</header>
+
+<h3>1) Escolha as fotos</h3>
+<div style="padding:0 10px;display:flex;gap:8px;flex-wrap:wrap">
+  <input type="file" id="files" multiple accept="image/*" hidden>
+  <button onclick="files.click()">📁 Escolher fotos do aparelho</button>
+  <input type="text" id="drv" placeholder="Link da pasta do Google Drive" style="flex:1;min-width:200px">
+  <button onclick="loadDrive()">Carregar pasta</button>
+  <span id="prog"></span>
+</div>
+<p class="hint f">Escolha o tipo acima e clique numa foto: cada clique cria um carrossel/mural. Para carrossel use fotos panorâmicas (largas); para murais 6 e 9, fotos em pé funcionam melhor. As linhas rosa mostram onde a foto será cortada.</p>
+<h3 class="s">Selecionadas agora: <span id="pcount"></span></h3>
+<div id="pend" class="s"></div>
+<div id="gal"></div>
+
+<div class="s"><h3>2) Layouts de Stories (<span id="lcount">0</span>)</h3><div id="lay"></div></div>
+<div class="f"><h3>2) Carrosséis e murais (<span id="fcount">0</span>)</h3>
+<p class="hint">Nos murais, os arquivos saem numerados na ordem de postagem (post_01 primeiro). O Instagram mostra o post mais novo no canto superior esquerdo; por isso a ordem começa pelo canto inferior direito. Poste o mural seguido, sem outros posts no meio.</p>
+<div id="flay"></div></div>
+
+<div id="modal">
+  <canvas id="cv"></canvas>
+  <div id="ctl">
+    <button onclick="nudge(-40,0)">◀</button><button onclick="nudge(40,0)">▶</button>
+    <button onclick="nudge(0,-40)">▲</button><button onclick="nudge(0,40)">▼</button>
+    <button onclick="zoomBy(.9)">−</button>
+    <input type="range" id="zoom" min="1" max="5" step="0.01" value="1" oninput="setZoom(+this.value)">
+    <button onclick="zoomBy(1.1)">+</button>
+    <button onclick="resetCell()">Resetar foto</button>
+    <button class="big" onclick="closeEdit()">Concluir</button>
+  </div>
+  <small>Arraste para mover · roda do mouse ou barra para zoom · nos stories, toque numa foto para selecioná-la</small>
+</div>
+<div id="msg"></div>
+
+<script>
+const W=1080,H=1920,$=id=>document.getElementById(id);
+const S={tab:'stories',photos:[],pending:[],layouts:[],mode:2,bg:'#000000',safe:true,hide:false};
+const run=(fn,...a)=>new Promise((ok,er)=>google.script.run.withSuccessHandler(ok).withFailureHandler(er)[fn](...a));
+const b64blob=r=>fetch(`data:${r.t};base64,${r.d}`).then(x=>x.blob());
+function toast(t){const m=$('msg');m.textContent=t;m.style.display='block';clearTimeout(toast.t);toast.t=setTimeout(()=>m.style.display='none',1800)}
+
+// ---------- geometria ----------
+function cells(n){
+  const m=40,g=24,top=S.safe?250:m,bot=S.safe?250:m,w=W-2*m,h=H-top-bot,r=[];
+  if(n<4){const ch=(h-g*(n-1))/n;for(let i=0;i<n;i++)r.push([m,top+i*(ch+g),w,ch])}
+  else{const cw=(w-g)/2,ch=(h-g)/2;for(let i=0;i<4;i++)r.push([m+(i%2)*(cw+g),top+(i>>1)*(ch+g),cw,ch])}
+  return r;
+}
+const cellsOf=L=>L.feed?[[0,0,L.w,L.h]]:cells(L.n);
+// ox0/oy0: deslocamento para exportar um recorte (ladrilho) do feed
+function draw(ctx,L,k,srcs,sel,lines,ox0=0,oy0=0){
+  const LW=L.w||W,LH=L.h||H;
+  ctx.setTransform(k,0,0,k,-ox0*k,-oy0*k);ctx.fillStyle=S.bg;ctx.fillRect(0,0,LW,LH);
+  cellsOf(L).forEach(([x,y,w,h],i)=>{
+    const it=L.items[i],src=srcs?srcs[i]:it.p.thumb,ar=src.width/src.height;
+    const dw=Math.max(w,h*ar)*it.z,dh=dw/ar,mx=(dw-w)/2,my=(dh-h)/2;
+    it.ox=Math.min(Math.max(it.ox,-mx),mx);it.oy=Math.min(Math.max(it.oy,-my),my);
+    ctx.save();ctx.beginPath();ctx.rect(x,y,w,h);ctx.clip();
+    ctx.imageSmoothingEnabled=true;ctx.imageSmoothingQuality='high';
+    ctx.drawImage(src,x+(w-dw)/2+it.ox,y+(h-dh)/2+it.oy,dw,dh);ctx.restore();
+    if(sel===i&&!L.feed){ctx.strokeStyle='#0a84ff';ctx.lineWidth=8;ctx.strokeRect(x+4,y+4,w-8,h-8)}
+  });
+  if(L.feed&&lines){
+    ctx.strokeStyle='#ff2d95';ctx.lineWidth=2.5/k;ctx.setLineDash([10/k,7/k]);ctx.beginPath();
+    for(let c=1;c<L.cols;c++){ctx.moveTo(c*L.tw,0);ctx.lineTo(c*L.tw,LH)}
+    for(let r=1;r<L.rows;r++){ctx.moveTo(0,r*L.th);ctx.lineTo(LW,r*L.th)}
+    ctx.stroke();ctx.setLineDash([]);
+  }
+}
+
+// ---------- carregar fotos ----------
+async function makeThumb(blob){
+  const bmp=await createImageBitmap(blob),s=Math.min(1,600/Math.max(bmp.width,bmp.height));
+  const c=document.createElement('canvas');c.width=Math.round(bmp.width*s);c.height=Math.round(bmp.height*s);
+  c.getContext('2d').drawImage(bmp,0,0,c.width,c.height);bmp.close();return c;
+}
+function addPhoto(name,thumb,blobFn){S.photos.push({name,thumb,url:thumb.toDataURL('image/jpeg',.7),blob:blobFn})}
+$('files').onchange=async e=>{
+  const fs=[...e.target.files].filter(f=>f.type.startsWith('image/'));let i=0;
+  for(const f of fs){
+    try{addPhoto(f.name,await makeThumb(f),async()=>f)}catch(x){toast('Não abriu: '+f.name)}
+    $('prog').textContent=`Carregando ${++i}/${fs.length}`;if(i%8==0)renderGal();
+  }
+  $('prog').textContent='';renderGal();e.target.value='';
+};
+async function loadDrive(){
+  try{
+    $('prog').textContent='Lendo pasta...';const list=await run('listFolder',$('drv').value.trim());let i=0;
+    for(const f of list){
+      try{addPhoto(f.name,await makeThumb(await b64blob(await run('getThumb',f.id))),async()=>b64blob(await run('getFull',f.id)))}catch(x){}
+      $('prog').textContent=`Carregando ${++i}/${list.length}`;if(i%8==0)renderGal();
+    }
+    $('prog').textContent='';renderGal();
+  }catch(x){$('prog').textContent='';alert('Erro ao ler pasta: '+(x.message||x))}
+}
+
+// ---------- abas, seleção e criação ----------
+const isFeed=()=>S.tab=='feed';
+const used=p=>S.layouts.some(L=>!!L.feed===isFeed()&&L.items.some(it=>it.p===p));
+function setTab(t){S.tab=t;document.body.dataset.tab=t;ui()}
+function fkChange(){const car=$('fk').value=='car';$('fnl').style.display=car?'':'none';$('tf').value=car?'1080x1350':'1080x1440'}
+function flush(){
+  while(S.pending.length>=S.mode)
+    S.layouts.push({n:S.mode,items:S.pending.splice(0,S.mode).map(p=>({p,z:1,ox:0,oy:0}))});
+}
+function mkFeed(p){
+  const kind=$('fk').value,[tw,th]=$('tf').value.split('x').map(Number);
+  const cols=kind=='car'?Math.max(2,Math.min(20,+$('fn').value||5)):3,rows=kind=='car'?1:+kind;
+  S.layouts.push({feed:1,kind,cols,rows,tw,th,w:cols*tw,h:rows*th,n:1,items:[{p,z:1,ox:0,oy:0}]});
+}
+function setMode(n){S.mode=n;flush();ui()}
+$('gal').onclick=e=>{
+  const d=e.target.closest('div[data-i]');if(!d)return;
+  const p=S.photos[+d.dataset.i];
+  if(used(p))return toast('Essa foto já foi usada aqui');
+  if(isFeed())mkFeed(p);
+  else{const j=S.pending.indexOf(p);j>=0?S.pending.splice(j,1):S.pending.push(p);flush()}
+  ui();
+};
+function ui(){
+  const st=S.layouts.filter(L=>!L.feed),fd=S.layouts.filter(L=>L.feed);
+  [2,3,4].forEach(n=>{$('m'+n).textContent=`${n} fotos (${st.filter(L=>L.n==n).length})`;$('m'+n).className=S.mode==n?'on':''});
+  $('t1').className=S.tab=='stories'?'on':'';$('t2').className=S.tab=='feed'?'on':'';
+  $('pcount').textContent=`${S.pending.length}/${S.mode}`;
+  $('pend').innerHTML=S.pending.map(p=>`<img src="${p.url}">`).join('');
+  $('lcount').textContent=st.length;$('fcount').textContent=fd.length;
+  renderGal();renderLay();
+}
+function renderGal(){
+  $('gal').innerHTML=S.photos.map((p,i)=>{
+    const u=used(p),j=isFeed()?-1:S.pending.indexOf(p);if(u&&S.hide)return'';
+    return `<div data-i="${i}" class="${u?'u':''}"><img src="${p.url}" loading="lazy">${u?'<span class="b">✓</span>':j>=0?`<span class="b">${j+1}</span>`:''}</div>`;
+  }).join('');
+}
+function renderLay(){
+  [false,true].forEach(f=>{
+    const box=$(f?'flay':'lay');box.innerHTML='';
+    S.layouts.filter(L=>!!L.feed===f).forEach((L,i)=>{
+      const lw=L.w||W,lh=L.h||H,cw=f?600:270,d=document.createElement('div');d.className='card';
+      const lab=f?`<small>${L.kind=='car'?L.cols+' slides em 1 carrossel':L.cols+'×'+L.rows+' = '+L.cols*L.rows+' posts'} · ${L.tw}×${L.th}</small>`:'';
+      d.innerHTML=`<canvas width="${cw}" height="${Math.round(cw*lh/lw)}"></canvas>${lab}<button>✏ Editar</button> <button>⬇</button> <button>🗑</button>`;
+      draw(d.firstChild.getContext('2d'),L,cw/lw,null,-1,true);
+      const b=d.querySelectorAll('button');
+      b[0].onclick=()=>openEdit(L);b[1].onclick=()=>dl(L,i);
+      b[2].onclick=()=>{S.layouts.splice(S.layouts.indexOf(L),1);ui()};
+      box.appendChild(d);
+    });
+  });
+}
+
+// ---------- editor ----------
+let E=null;const cv=$('cv'),cx=cv.getContext('2d');
+function sizeCv(){
+  const L=E.L,lw=L.w||W,lh=L.h||H;E.k=Math.min(.5,1400/lw);
+  cv.width=Math.round(lw*E.k);cv.height=Math.round(lh*E.k);
+  const s=Math.min((innerWidth-16)/lw,(innerHeight-170)/lh);
+  cv.style.width=lw*s+'px';cv.style.height=lh*s+'px';
+}
+async function openEdit(L){
+  $('modal').style.display='flex';E={L,sel:0,srcs:null,drag:null};sizeCv();
+  cx.fillStyle='#000';cx.fillRect(0,0,cv.width,cv.height);
+  E.srcs=await Promise.all(L.items.map(async it=>createImageBitmap(await it.p.blob())));
+  $('zoom').value=L.items[0].z;redraw();
+}
+function redraw(){if(E&&E.srcs)draw(cx,E.L,E.k,E.srcs,E.sel,true)}
+function closeEdit(){if(E&&E.srcs)E.srcs.forEach(b=>b.close());E=null;$('modal').style.display='none';renderLay()}
+const cur=()=>E.L.items[E.sel];
+const pos=e=>{const r=cv.getBoundingClientRect();return[(e.clientX-r.left)*(E.L.w||W)/r.width,(e.clientY-r.top)*(E.L.h||H)/r.height]};
+cv.onpointerdown=e=>{
+  if(!E||!E.srcs)return;const[x,y]=pos(e);
+  const i=cellsOf(E.L).findIndex(([a,b,w,h])=>x>=a&&x<=a+w&&y>=b&&y<=b+h);
+  if(i>=0){E.sel=i;$('zoom').value=cur().z}
+  E.drag=[x,y];cv.setPointerCapture(e.pointerId);redraw();
+};
+cv.onpointermove=e=>{if(!E||!E.drag)return;const[x,y]=pos(e);cur().ox+=x-E.drag[0];cur().oy+=y-E.drag[1];E.drag=[x,y];redraw()};
+cv.onpointerup=()=>{if(E)E.drag=null};
+cv.onwheel=e=>{e.preventDefault();zoomBy(e.deltaY<0?1.08:.93)};
+function setZoom(z){if(!E)return;cur().z=Math.min(5,Math.max(1,z));$('zoom').value=cur().z;redraw()}
+function zoomBy(f){if(E)setZoom(cur().z*f)}
+function nudge(dx,dy){if(!E)return;cur().ox+=dx;cur().oy+=dy;redraw()}
+function resetCell(){if(!E)return;Object.assign(cur(),{z:1,ox:0,oy:0});$('zoom').value=1;redraw()}
+
+// ---------- exportação em alta ----------
+const ext=()=>$('fmt').value=='image/png'?'png':'jpg';
+const pad=(n,l=2)=>String(n).padStart(l,'0');
+const toBlob=c=>new Promise(r=>c.toBlob(r,$('fmt').value,.95));
+async function render(L){ // stories: 1 imagem
+  const k=+$('scl').value,srcs=await Promise.all(L.items.map(async it=>createImageBitmap(await it.p.blob())));
+  const c=document.createElement('canvas');c.width=W*k;c.height=H*k;
+  draw(c.getContext('2d'),L,k,srcs);srcs.forEach(b=>b.close());return toBlob(c);
+}
+async function feedFiles(L,z,prefix){ // feed: um arquivo por ladrilho, já na ordem de postagem
+  const k=+$('scl').value,bmp=await createImageBitmap(await L.items[0].p.blob()),car=L.kind=='car',tot=L.cols*L.rows;
+  for(let r=0;r<L.rows;r++)for(let c=0;c<L.cols;c++){
+    const cn=document.createElement('canvas');cn.width=L.tw*k;cn.height=L.th*k;
+    draw(cn.getContext('2d'),L,k,[bmp],-1,false,c*L.tw,r*L.th);
+    const po=car?c+1:(L.rows-1-r)*L.cols+(L.cols-1-c)+1;
+    z.file(`${prefix}${car?'slide':'post'}_${pad(po)}de${pad(tot)}${car?'':`_linha${r+1}_col${c+1}`}.${ext()}`,await toBlob(cn));
+  }
+  bmp.close();
+}
+function save(blob,name){const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),4000)}
+const zipOpt={type:'blob',compression:'STORE'};
+async function dl(L,i){
+  toast('Gerando...');
+  if(L.feed){const z=new JSZip();await feedFiles(L,z,'');save(await z.generateAsync(zipOpt),`feed_${pad(i+1)}_${L.kind=='car'?'carrossel':'mural'+L.cols*L.rows}.zip`)}
+  else save(await render(L),`story_${pad(i+1,3)}_${L.n}fotos.${ext()}`);
+}
+async function zipAll(){
+  const f=isFeed(),arr=S.layouts.filter(L=>!!L.feed===f);
+  if(!arr.length)return toast('Nada para baixar nesta aba');
+  const z=new JSZip();
+  for(let i=0;i<arr.length;i++){
+    $('prog').textContent=`Gerando ${i+1}/${arr.length}`;const L=arr[i];
+    if(f)await feedFiles(L,z,`feed_${pad(i+1)}_${L.kind=='car'?'carrossel':'mural'+L.cols*L.rows}/`);
+    else z.file(`story_${pad(i+1,3)}_${L.n}fotos.${ext()}`,await render(L));
+  }
+  $('prog').textContent='Compactando...';
+  save(await z.generateAsync(zipOpt),f?'feed.zip':'stories.zip');$('prog').textContent='';
+}
+fkChange();ui();
+</script>
+</body>
+</html>
